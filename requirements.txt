@@ -1,0 +1,4 @@
+httpx
+mcp
+pytest
+pytest-asyncio
