@@ -122,3 +122,60 @@ async def test_get_forecast_invalid_coordinates():
     data = json.loads(result)
     assert "error" in data
     assert "Latitude must be between -90 and 90" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_make_openmeteo_request_http_error():
+    """Test API request HTTP error."""
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_response = httpx.Response(404)
+        mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
+        mock_response.raise_for_status = lambda: (_ for _ in ()).throw(
+            httpx.HTTPStatusError("Not found", request=None, response=mock_response)
+        )
+
+        result = await make_openmeteo_request("http://test.com")
+        assert result is None
+
+
+@pytest.mark.asyncio
+async def test_make_openmeteo_request_json_error():
+    """Test API request JSON parsing error."""
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_response = httpx.Response(200)
+        mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
+        mock_response.raise_for_status = lambda: None
+        mock_response.json = lambda: (_ for _ in ()).throw(ValueError("Invalid JSON"))
+
+        result = await make_openmeteo_request("http://test.com")
+        assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_current_weather_exception():
+    """Test current weather with unexpected exception."""
+    with patch("server.make_openmeteo_request", side_effect=ValueError("Test error")):
+        result = await get_current_weather(40.7128, -74.0060)
+        data = json.loads(result)
+        assert "error" in data
+        assert "Error fetching weather data" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_forecast_exception():
+    """Test forecast with unexpected exception."""
+    with patch("server.make_openmeteo_request", side_effect=RuntimeError("Test error")):
+        result = await get_forecast(40.7128, -74.0060)
+        data = json.loads(result)
+        assert "error" in data
+        assert "Error fetching forecast data" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_location_exception():
+    """Test location search with unexpected exception."""
+    with patch("server.make_openmeteo_request", side_effect=ConnectionError("Test error")):
+        result = await get_location("Test City")
+        data = json.loads(result)
+        assert "error" in data
+        assert "Error searching for location" in data["error"]
