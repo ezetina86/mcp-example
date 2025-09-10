@@ -34,7 +34,7 @@ async def make_openmeteo_request(url: str) -> Optional[dict[str, Any]]:
             logger.info(f"Making request to: {url}")
             response = await client.get(url, headers=headers, timeout=30.0)
             response.raise_for_status()
-            return await response.json()
+            return response.json()
     except httpx.TimeoutException:
         logger.error(f"Timeout error for URL: {url}")
         return None
