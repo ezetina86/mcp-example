@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -18,8 +18,15 @@ USER_AGENT = "weather-app/1.0"
 mcp = FastMCP("weather")
 
 
-async def make_openmeteo_request(url: str) -> dict[str, Any] | None:
-    """Make a request to the Open-Meteo API with proper error handling."""
+async def make_openmeteo_request(url: str) -> Optional[dict[str, Any]]:
+    """Make a request to the Open-Meteo API with proper error handling.
+
+    Args:
+        url: The complete URL to make the request to
+
+    Returns:
+        JSON response data as a dictionary, or None if request fails
+    """
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 
     try:
@@ -44,9 +51,17 @@ async def get_current_weather(latitude: float, longitude: float) -> str:
     """Get current weather for a location.
 
     Args:
-        latitude: Latitude of the location
-        longitude: Longitude of the location
+        latitude: Latitude of the location (-90 to 90)
+        longitude: Longitude of the location (-180 to 180)
+
+    Returns:
+        JSON string containing current weather data
     """
+    # Validate coordinates
+    if not (-90 <= latitude <= 90):
+        return json.dumps({"error": "Latitude must be between -90 and 90"})
+    if not (-180 <= longitude <= 180):
+        return json.dumps({"error": "Longitude must be between -180 and 180"})
     try:
         params = (
             "temperature_2m,is_day,showers,cloud_cover,wind_speed_10m,"
@@ -62,23 +77,39 @@ async def get_current_weather(latitude: float, longitude: float) -> str:
         data = await make_openmeteo_request(url)
 
         if not data:
-            return "Unable to fetch current weather data for this location."
+            return json.dumps({
+                "error": (
+                    "Unable to fetch current weather data for this location."
+                )
+            })
 
         return json.dumps(data, indent=2)
     except Exception as e:
         logger.error(f"Error in get_current_weather: {e}")
-        return f"Error fetching weather data: {str(e)}"
+        return json.dumps({
+            "error": f"Error fetching weather data: {str(e)}"
+        })
 
 
 @mcp.tool()
-async def get_forecast(latitude: float, longitude: float, days: int = 7) -> str:
+async def get_forecast(
+    latitude: float, longitude: float, days: int = 7
+) -> str:
     """Get weather forecast for a location.
 
     Args:
-        latitude: Latitude of the location
-        longitude: Longitude of the location
+        latitude: Latitude of the location (-90 to 90)
+        longitude: Longitude of the location (-180 to 180)
         days: Number of forecast days (1-16, default 7)
+
+    Returns:
+        JSON string containing forecast data
     """
+    # Validate coordinates
+    if not (-90 <= latitude <= 90):
+        return json.dumps({"error": "Latitude must be between -90 and 90"})
+    if not (-180 <= longitude <= 180):
+        return json.dumps({"error": "Longitude must be between -180 and 180"})
     try:
         forecast_days = min(max(days, 1), 16)  # Clamp between 1-16
         params = (
@@ -94,12 +125,14 @@ async def get_forecast(latitude: float, longitude: float, days: int = 7) -> str:
         data = await make_openmeteo_request(url)
 
         if not data:
-            return "Unable to fetch forecast data for this location."
+            return json.dumps(
+                {"error": "Unable to fetch forecast data for this location."}
+            )
 
         return json.dumps(data, indent=2)
     except Exception as e:
         logger.error(f"Error in get_forecast: {e}")
-        return f"Error fetching forecast data: {str(e)}"
+        return json.dumps({"error": f"Error fetching forecast data: {str(e)}"})
 
 
 @mcp.tool()
@@ -108,10 +141,13 @@ async def get_location(name: str) -> str:
 
     Args:
         name: Name of the city or location to search for
+
+    Returns:
+        JSON string containing location search results
     """
     try:
         if not name.strip():
-            return "Location name cannot be empty."
+            return json.dumps({"error": "Location name cannot be empty."})
 
         url = (
             f"{GEOCODING_API_BASE}/search?"
@@ -121,12 +157,12 @@ async def get_location(name: str) -> str:
         data = await make_openmeteo_request(url)
 
         if not data:
-            return "Unable to search for locations."
+            return json.dumps({"error": "Unable to search for locations."})
 
         return json.dumps(data, indent=2)
     except Exception as e:
         logger.error(f"Error in get_location: {e}")
-        return f"Error searching for location: {str(e)}"
+        return json.dumps({"error": f"Error searching for location: {str(e)}"})
 
 
 if __name__ == "__main__":
